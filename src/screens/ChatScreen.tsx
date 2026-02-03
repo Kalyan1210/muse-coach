@@ -1,9 +1,9 @@
 /**
  * Chat Screen
- * Conversation with an AI coach
+ * Conversation with an AI coach - with persistence and smooth typing
  */
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   ScrollView,
@@ -17,48 +17,90 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  FadeInDown,
-  FadeIn,
-} from 'react-native-reanimated';
 import { useAppTheme, useCoachColors } from '../theme/ThemeContext';
 import { RootStackScreenProps } from '../navigation/types';
 import { Text, Avatar } from '../components/ui';
 import { getCoachById } from '../data/coaches';
 import { Message } from '../types';
+import { sendMessageToAI, isAIConfigured } from '../services/ai';
+import { useStore } from '../store/useStore';
 
 type Props = RootStackScreenProps<'Chat'>;
 
 // Generate unique ID
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
+// Typing message component with typewriter effect
+const TypingMessage: React.FC<{
+  content: string;
+  onComplete: () => void;
+}> = ({ content, onComplete }) => {
+  const theme = useAppTheme();
+  const [displayedText, setDisplayedText] = useState('');
+  const [isComplete, setIsComplete] = useState(false);
+  
+  useEffect(() => {
+    if (isComplete) return;
+    
+    let index = 0;
+    const words = content.split(' ');
+    
+    const typeWord = () => {
+      if (index < words.length) {
+        setDisplayedText(words.slice(0, index + 1).join(' '));
+        index++;
+        // Vary the speed slightly for natural feel
+        const delay = 30 + Math.random() * 20;
+        setTimeout(typeWord, delay);
+      } else {
+        setIsComplete(true);
+        onComplete();
+      }
+    };
+    
+    typeWord();
+  }, [content, isComplete, onComplete]);
+  
+  return (
+    <View style={styles.coachMessageRow}>
+      <View style={styles.coachBubbleContainer}>
+        <View
+          style={[
+            styles.messageBubble,
+            styles.coachBubble,
+            { backgroundColor: theme.colors.surface },
+          ]}
+        >
+          <Text variant="bodyLarge" color={theme.colors.textPrimary}>
+            {displayedText}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 // Message bubble component
 const MessageBubble: React.FC<{
   message: Message;
   isUser: boolean;
-  coachEmoji?: string;
-  coachColorKey?: string;
-}> = ({ message, isUser, coachEmoji, coachColorKey }) => {
+}> = ({ message, isUser }) => {
   const theme = useAppTheme();
   
   if (isUser) {
     return (
-      <Animated.View
-        entering={FadeInDown.duration(300)}
+      <View
         style={[styles.messageBubble, styles.userBubble, { backgroundColor: theme.colors.buttonPrimary }]}
       >
         <Text variant="bodyLarge" color={theme.colors.textInverse}>
           {message.content}
         </Text>
-      </Animated.View>
+      </View>
     );
   }
   
   return (
-    <Animated.View
-      entering={FadeInDown.duration(300)}
-      style={styles.coachMessageRow}
-    >
+    <View style={styles.coachMessageRow}>
       <View style={styles.coachBubbleContainer}>
         <View
           style={[
@@ -72,7 +114,7 @@ const MessageBubble: React.FC<{
           </Text>
         </View>
       </View>
-    </Animated.View>
+    </View>
   );
 };
 
@@ -81,14 +123,13 @@ const TypingIndicator: React.FC = () => {
   const theme = useAppTheme();
   
   return (
-    <Animated.View
-      entering={FadeIn.duration(200)}
+    <View
       style={[styles.typingIndicator, { backgroundColor: theme.colors.surface }]}
     >
       <View style={[styles.typingDot, { backgroundColor: theme.colors.textTertiary }]} />
       <View style={[styles.typingDot, styles.typingDotMiddle, { backgroundColor: theme.colors.textTertiary }]} />
       <View style={[styles.typingDot, { backgroundColor: theme.colors.textTertiary }]} />
-    </Animated.View>
+    </View>
   );
 };
 
@@ -101,11 +142,40 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [typingMessage, setTypingMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   
-  // Initialize with greeting
+  const { 
+    canSendMessage, 
+    incrementMessageCount, 
+    isPro,
+    conversations,
+    startConversation,
+    addMessage,
+    activeConversationId,
+    setActiveConversation,
+  } = useStore();
+  
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  
+  // Load existing conversation or start new one
   useEffect(() => {
-    if (coach && messages.length === 0) {
+    if (!coach) return;
+    
+    // Check for existing conversation with this coach
+    const existingConversation = conversations.find(c => c.coachId === coachId);
+    
+    if (existingConversation && existingConversation.messages.length > 0) {
+      // Load existing conversation
+      setConversationId(existingConversation.id);
+      setMessages(existingConversation.messages);
+      setActiveConversation(existingConversation.id);
+    } else {
+      // Start new conversation with greeting
+      const newId = startConversation(coachId);
+      setConversationId(newId);
+      
       const greeting: Message = {
         id: generateId(),
         coachId: coach.id,
@@ -114,21 +184,44 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
         timestamp: new Date(),
       };
       setMessages([greeting]);
+      addMessage(newId, greeting);
     }
-  }, [coach]);
+  }, [coach, coachId]);
   
   // Scroll to bottom when new messages arrive
   useEffect(() => {
     setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
-  }, [messages, isTyping]);
+  }, [messages, isTyping, typingMessage]);
+  
+  const handleTypingComplete = useCallback(() => {
+    if (typingMessage && conversationId && coach) {
+      const aiMessage: Message = {
+        id: generateId(),
+        coachId: coach.id,
+        role: 'assistant',
+        content: typingMessage,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, aiMessage]);
+      addMessage(conversationId, aiMessage);
+      setTypingMessage(null);
+    }
+  }, [typingMessage, conversationId, coach, addMessage]);
   
   const handleSend = async () => {
-    if (!inputText.trim() || !coach) return;
+    if (!inputText.trim() || !coach || !conversationId) return;
+    
+    // Check message limits for free users
+    if (!canSendMessage()) {
+      setError('Daily message limit reached. Upgrade to Pro for unlimited messages!');
+      return;
+    }
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Keyboard.dismiss();
+    setError(null);
     
     const userMessage: Message = {
       id: generateId(),
@@ -138,31 +231,50 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
       timestamp: new Date(),
     };
     
+    // Add to local state and store
     setMessages(prev => [...prev, userMessage]);
+    addMessage(conversationId, userMessage);
     setInputText('');
     setIsTyping(true);
     
-    // Simulate AI response (replace with actual API call)
-    setTimeout(() => {
-      const responses = [
-        "That's a thoughtful question. Let me reflect on that with you...",
-        "I appreciate you sharing that. Here's what I'm noticing...",
-        "This is an important topic. Let's explore it together...",
-        "Thank you for your honesty. What do you think is at the root of this?",
-        "I hear you. Sometimes the first step is simply acknowledging where we are.",
-      ];
-      
-      const aiMessage: Message = {
-        id: generateId(),
-        coachId: coach.id,
-        role: 'assistant',
-        content: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date(),
-      };
-      
-      setIsTyping(false);
-      setMessages(prev => [...prev, aiMessage]);
-    }, 1500);
+    // Increment message count for free users
+    if (!isPro) {
+      incrementMessageCount();
+    }
+    
+    // Check if AI is configured
+    if (!isAIConfigured()) {
+      // Fall back to mock responses if API key not set
+      setTimeout(() => {
+        const responses = [
+          "Hmm, that's really interesting. You know, I think there might be something deeper going on here. Like, sometimes what bothers us on the surface is pointing to something we actually care about underneath. What do you think?",
+          "Oh I totally get that. Let me think... so basically, it sounds like you're dealing with a lot right now. The thing is, these situations usually have more than one side to them. What would help you feel a bit better about this?",
+          "Yeah, that makes sense. Here's what I'm noticing - and tell me if I'm off base - but it seems like this is really weighing on you. Sometimes just talking through it helps. What's the part that bugs you most?",
+          "I hear you. Honestly, that sounds tough. So here's a thought - maybe we don't need to figure it all out right now? Like, what's one tiny thing that might help, even just a little bit?",
+          "Okay so... let me think about this. You know what I'm curious about? What would it look like if things actually worked out? Sometimes it helps to imagine that first.",
+        ];
+        
+        setIsTyping(false);
+        setTypingMessage(responses[Math.floor(Math.random() * responses.length)]);
+      }, 1000);
+      return;
+    }
+    
+    // Call AI API
+    const result = await sendMessageToAI(
+      coach.systemPrompt,
+      messages,
+      userMessage.content
+    );
+    
+    setIsTyping(false);
+    
+    if (result.success && result.content) {
+      setTypingMessage(result.content);
+    } else {
+      setError(result.error || 'Failed to get response. Please try again.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
   };
   
   if (!coach) {
@@ -185,6 +297,7 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.backButton}
+            activeOpacity={0.7}
           >
             <Ionicons name="chevron-back" size={28} color={theme.colors.textPrimary} />
           </TouchableOpacity>
@@ -192,6 +305,7 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
           <TouchableOpacity
             style={styles.headerCenter}
             onPress={() => navigation.navigate('CoachDetail', { coachId })}
+            activeOpacity={0.7}
           >
             <Avatar
               emoji={coach.emoji}
@@ -206,7 +320,7 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
             </View>
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.menuButton}>
+          <TouchableOpacity style={styles.menuButton} activeOpacity={0.7}>
             <Ionicons name="ellipsis-horizontal" size={24} color={theme.colors.textPrimary} />
           </TouchableOpacity>
         </View>
@@ -223,12 +337,27 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
               key={message.id}
               message={message}
               isUser={message.role === 'user'}
-              coachEmoji={coach.emoji}
-              coachColorKey={coach.colorKey}
             />
           ))}
           
           {isTyping && <TypingIndicator />}
+          
+          {typingMessage && (
+            <TypingMessage
+              content={typingMessage}
+              onComplete={handleTypingComplete}
+            />
+          )}
+          
+          {error && (
+            <View
+              style={[styles.errorBanner, { backgroundColor: theme.colors.error + '20' }]}
+            >
+              <Text variant="footnote" color={theme.colors.error}>
+                {error}
+              </Text>
+            </View>
+          )}
         </ScrollView>
         
         {/* Input */}
@@ -245,11 +374,12 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
             />
             <TouchableOpacity
               onPress={handleSend}
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || isTyping || !!typingMessage}
+              activeOpacity={0.7}
               style={[
                 styles.sendButton,
                 {
-                  backgroundColor: inputText.trim()
+                  backgroundColor: inputText.trim() && !isTyping && !typingMessage
                     ? coachColors?.primary
                     : theme.colors.textTertiary,
                 },
@@ -342,6 +472,11 @@ const styles = StyleSheet.create({
     marginHorizontal: 4,
     opacity: 0.7,
   },
+  errorBanner: {
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
   inputContainer: {
     padding: 12,
     paddingBottom: 24,
@@ -371,4 +506,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-

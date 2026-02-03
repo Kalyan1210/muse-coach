@@ -55,7 +55,13 @@ export const Avatar: React.FC<AvatarProps> = ({
         style,
       ]}
     >
-      <Text style={{ fontSize: sizeStyles.fontSize }}>
+      <Text 
+        style={{ 
+          fontSize: sizeStyles.fontSize,
+          lineHeight: sizeStyles.fontSize * 1.2,
+          textAlign: 'center',
+        }}
+      >
         {emoji}
       </Text>
     </View>
@@ -66,6 +72,7 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'visible',
   },
 });
 

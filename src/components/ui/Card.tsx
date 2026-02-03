@@ -1,24 +1,18 @@
 /**
  * Card Component
- * Apple-style card with subtle shadows and smooth interactions
+ * Apple-style card with subtle shadows and glass-smooth interactions
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   TouchableOpacity,
   View,
   StyleSheet,
   ViewStyle,
+  Animated,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../../theme/ThemeContext';
-
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 interface CardProps {
   children: React.ReactNode;
@@ -36,18 +30,24 @@ export const Card: React.FC<CardProps> = ({
   style,
 }) => {
   const theme = useAppTheme();
-  const scale = useSharedValue(1);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   
   const handlePressIn = () => {
-    if (onPress) {
-      scale.value = withSpring(0.98, theme.animation.spring.snappy);
-    }
+    Animated.spring(scaleAnim, {
+      toValue: 0.98,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
   };
   
   const handlePressOut = () => {
-    if (onPress) {
-      scale.value = withSpring(1, theme.animation.spring.snappy);
-    }
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
   };
   
   const handlePress = () => {
@@ -56,10 +56,6 @@ export const Card: React.FC<CardProps> = ({
       onPress();
     }
   };
-  
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
   
   const getPadding = () => {
     switch (padding) {
@@ -98,15 +94,17 @@ export const Card: React.FC<CardProps> = ({
   
   if (onPress) {
     return (
-      <AnimatedTouchable
-        onPress={handlePress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        activeOpacity={0.95}
-        style={[cardStyles, animatedStyle, style]}
-      >
-        {children}
-      </AnimatedTouchable>
+      <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+        <TouchableOpacity
+          onPress={handlePress}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          activeOpacity={1}
+          style={[cardStyles, style]}
+        >
+          {children}
+        </TouchableOpacity>
+      </Animated.View>
     );
   }
   
@@ -116,4 +114,3 @@ export const Card: React.FC<CardProps> = ({
     </View>
   );
 };
-

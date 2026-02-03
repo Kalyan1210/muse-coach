@@ -3,19 +3,29 @@
  * RevenueCat subscription paywall
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../theme/ThemeContext';
 import { RootStackScreenProps } from '../navigation/types';
 import { Text, Title1, Button, Card } from '../components/ui';
+import { 
+  getOfferings, 
+  purchasePackage, 
+  restorePurchases,
+  checkProStatus,
+} from '../services/revenue-cat';
+import { useStore } from '../store/useStore';
+import { PurchasesPackage } from 'react-native-purchases';
 
 type Props = RootStackScreenProps<'Paywall'>;
 
@@ -33,18 +43,75 @@ const features = [
 export const PaywallScreen: React.FC<Props> = ({ navigation }) => {
   const theme = useAppTheme();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('annual');
+  const [packages, setPackages] = useState<PurchasesPackage[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const { setIsPro } = useStore();
+  
+  // Load offerings on mount
+  useEffect(() => {
+    const loadOfferings = async () => {
+      const availablePackages = await getOfferings();
+      if (availablePackages.length > 0) {
+        setPackages(availablePackages);
+      }
+    };
+    loadOfferings();
+  }, []);
   
   const handleSubscribe = async () => {
-    // TODO: Implement RevenueCat purchase
-    console.log('Subscribe to:', selectedPlan);
+    setIsLoading(true);
     
-    // For demo, just close the modal
-    navigation.goBack();
+    // Find the selected package
+    const selectedPackage = packages.find((pkg) => {
+      if (selectedPlan === 'annual') {
+        return pkg.identifier.includes('annual') || pkg.packageType === 'ANNUAL';
+      }
+      return pkg.identifier.includes('monthly') || pkg.packageType === 'MONTHLY';
+    });
+    
+    if (selectedPackage) {
+      const result = await purchasePackage(selectedPackage);
+      
+      if (result.success) {
+        setIsPro(true);
+        Alert.alert('Success!', 'Welcome to Muse Pro!', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      } else if (result.error && result.error !== 'cancelled') {
+        Alert.alert('Purchase Failed', result.error);
+      }
+    } else {
+      // Demo mode - no packages available (RevenueCat not configured)
+      Alert.alert(
+        'Demo Mode',
+        'RevenueCat is not configured. In production, this would process the purchase.',
+        [{ text: 'OK' }]
+      );
+    }
+    
+    setIsLoading(false);
   };
   
   const handleRestore = async () => {
-    // TODO: Implement RevenueCat restore
-    console.log('Restore purchases');
+    setIsRestoring(true);
+    
+    const result = await restorePurchases();
+    
+    if (result.success) {
+      if (result.isPro) {
+        setIsPro(true);
+        Alert.alert('Restored!', 'Your Pro subscription has been restored.', [
+          { text: 'OK', onPress: () => navigation.goBack() }
+        ]);
+      } else {
+        Alert.alert('No Purchases Found', 'No active subscriptions were found.');
+      }
+    } else {
+      Alert.alert('Restore Failed', result.error || 'Please try again.');
+    }
+    
+    setIsRestoring(false);
   };
   
   return (
@@ -187,13 +254,23 @@ export const PaywallScreen: React.FC<Props> = ({ navigation }) => {
           fullWidth
           size="large"
           style={styles.subscribeButton}
+          loading={isLoading}
+          disabled={isLoading || isRestoring}
         />
         
         {/* Restore */}
-        <TouchableOpacity onPress={handleRestore} style={styles.restoreButton}>
-          <Text variant="subheadline" color={theme.colors.textSecondary}>
-            Restore Purchases
-          </Text>
+        <TouchableOpacity 
+          onPress={handleRestore} 
+          style={styles.restoreButton}
+          disabled={isLoading || isRestoring}
+        >
+          {isRestoring ? (
+            <ActivityIndicator size="small" color={theme.colors.textSecondary} />
+          ) : (
+            <Text variant="subheadline" color={theme.colors.textSecondary}>
+              Restore Purchases
+            </Text>
+          )}
         </TouchableOpacity>
         
         {/* Fine Print */}

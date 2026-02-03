@@ -9,11 +9,12 @@ import Purchases, {
   LOG_LEVEL,
 } from 'react-native-purchases';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
-// TODO: Replace with your actual RevenueCat API keys
+// API keys from environment variables via expo-constants
 const API_KEYS = {
-  ios: 'YOUR_REVENUECAT_IOS_API_KEY',
-  android: 'YOUR_REVENUECAT_ANDROID_API_KEY',
+  ios: Constants.expoConfig?.extra?.revenuecatIosApiKey || '',
+  android: Constants.expoConfig?.extra?.revenuecatAndroidApiKey || '',
 };
 
 // Entitlement ID for Pro features
@@ -26,10 +27,32 @@ export const PRODUCT_IDS = {
 };
 
 /**
+ * Check if RevenueCat is configured
+ */
+export const isRevenueCatConfigured = (): boolean => {
+  // RevenueCat doesn't support web
+  if (Platform.OS === 'web') return false;
+  
+  const apiKey = Platform.OS === 'ios' ? API_KEYS.ios : API_KEYS.android;
+  return !!apiKey && apiKey.length > 0 && !apiKey.includes('xxxxx');
+};
+
+/**
  * Initialize RevenueCat SDK
  */
 export const initializeRevenueCat = async (): Promise<void> => {
   try {
+    // Skip initialization on web or if not configured
+    if (Platform.OS === 'web') {
+      console.log('RevenueCat not supported on web - skipping');
+      return;
+    }
+    
+    if (!isRevenueCatConfigured()) {
+      console.log('RevenueCat not configured - skipping initialization');
+      return;
+    }
+    
     // Enable debug logs in development
     if (__DEV__) {
       Purchases.setLogLevel(LOG_LEVEL.DEBUG);

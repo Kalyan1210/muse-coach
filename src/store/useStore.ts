@@ -1,9 +1,11 @@
 /**
  * Global Store
- * Zustand store for app state management
+ * Zustand store for app state management with persistence
  */
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Message, Conversation, UserContext, SavedWisdom } from '../types';
 
 interface AppState {
@@ -22,6 +24,10 @@ interface AppState {
   dailyMessageCount: number;
   lastMessageDate: string | null;
   
+  // Hydration state
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
+  
   // Actions
   setUser: (user: UserContext) => void;
   setIsPro: (isPro: boolean) => void;
@@ -29,6 +35,7 @@ interface AppState {
   addMessage: (conversationId: string, message: Message) => void;
   startConversation: (coachId: string) => string;
   setActiveConversation: (id: string | null) => void;
+  getConversation: (id: string) => Conversation | undefined;
   
   saveWisdom: (wisdom: Omit<SavedWisdom, 'id' | 'savedAt'>) => void;
   removeWisdom: (id: string) => void;
@@ -42,7 +49,9 @@ const FREE_DAILY_LIMIT = 15;
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-export const useStore = create<AppState>((set, get) => ({
+export const useStore = create<AppState>()(
+  persist(
+    (set, get) => ({
   // Initial state
   user: null,
   isPro: false,
@@ -51,6 +60,10 @@ export const useStore = create<AppState>((set, get) => ({
   savedWisdom: [],
   dailyMessageCount: 0,
   lastMessageDate: null,
+  
+  // Hydration
+  _hasHydrated: false,
+  setHasHydrated: (state) => set({ _hasHydrated: state }),
   
   // User actions
   setUser: (user) => set({ user }),
@@ -90,6 +103,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
   
   setActiveConversation: (id) => set({ activeConversationId: id }),
+  
+  getConversation: (id) => {
+    return get().conversations.find((conv) => conv.id === id);
+  },
   
   // Wisdom actions
   saveWisdom: (wisdomData) => {
@@ -140,5 +157,23 @@ export const useStore = create<AppState>((set, get) => ({
     // Check against limit
     return dailyMessageCount < FREE_DAILY_LIMIT;
   },
-}));
+    }),
+    {
+      name: 'muse-storage',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({
+        // Only persist these fields
+        user: state.user,
+        isPro: state.isPro,
+        conversations: state.conversations,
+        savedWisdom: state.savedWisdom,
+        dailyMessageCount: state.dailyMessageCount,
+        lastMessageDate: state.lastMessageDate,
+      }),
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
+    }
+  )
+);
 

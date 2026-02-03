@@ -1,25 +1,19 @@
 /**
  * Button Component
- * Apple-style buttons with haptic feedback
+ * Apple-style buttons with haptic feedback and glass-smooth animations
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   TouchableOpacity,
   StyleSheet,
   ViewStyle,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
 import { useAppTheme } from '../../theme/ThemeContext';
 import { Text } from './Text';
-
-const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'accent';
 type ButtonSize = 'small' | 'medium' | 'large';
@@ -50,24 +44,30 @@ export const Button: React.FC<ButtonProps> = ({
   style,
 }) => {
   const theme = useAppTheme();
-  const scale = useSharedValue(1);
+  const scaleAnim = useRef(new Animated.Value(1)).current;
   
   const handlePressIn = () => {
-    scale.value = withSpring(0.97, theme.animation.spring.snappy);
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
   };
   
   const handlePressOut = () => {
-    scale.value = withSpring(1, theme.animation.spring.snappy);
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
   };
   
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress();
   };
-  
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
   
   // Get colors based on variant
   const getColors = () => {
@@ -128,38 +128,44 @@ export const Button: React.FC<ButtonProps> = ({
   const sizeStyles = getSizeStyles();
   
   return (
-    <AnimatedTouchable
-      onPress={handlePress}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      disabled={disabled || loading}
-      activeOpacity={0.9}
+    <Animated.View 
       style={[
-        styles.button,
-        sizeStyles,
-        { backgroundColor: colors.background },
+        { transform: [{ scale: scaleAnim }] },
         fullWidth && styles.fullWidth,
-        disabled && styles.disabled,
-        variant === 'ghost' && styles.ghost,
-        animatedStyle,
-        style,
       ]}
     >
-      {loading ? (
-        <ActivityIndicator color={colors.text} size="small" />
-      ) : (
-        <>
-          {icon && <>{icon}</>}
-          <Text
-            variant={size === 'small' ? 'buttonSmall' : 'button'}
-            color={colors.text}
-            style={icon ? { marginLeft: theme.spacing.xs } : undefined}
-          >
-            {title}
-          </Text>
-        </>
-      )}
-    </AnimatedTouchable>
+      <TouchableOpacity
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        disabled={disabled || loading}
+        activeOpacity={1}
+        style={[
+          styles.button,
+          sizeStyles,
+          { backgroundColor: colors.background },
+          fullWidth && styles.fullWidth,
+          disabled && styles.disabled,
+          variant === 'ghost' && styles.ghost,
+          style,
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator color={colors.text} size="small" />
+        ) : (
+          <>
+            {icon && <>{icon}</>}
+            <Text
+              variant={size === 'small' ? 'buttonSmall' : 'button'}
+              color={colors.text}
+              style={icon ? { marginLeft: theme.spacing.xs } : undefined}
+            >
+              {title}
+            </Text>
+          </>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
@@ -179,4 +185,3 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
 });
-
