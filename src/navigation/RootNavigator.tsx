@@ -19,6 +19,8 @@ import { CoachDetailScreen } from '../screens/CoachDetailScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
+import { CreateCoachScreen } from '../screens/CreateCoachScreen';
+import { PersonalContextScreen } from '../screens/PersonalContextScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -90,6 +92,22 @@ export const RootNavigator: React.FC = () => {
       <Stack.Screen
         name="Paywall"
         component={PaywallScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+        }}
+      />
+      <Stack.Screen
+        name="CreateCoach"
+        component={CreateCoachScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+        }}
+      />
+      <Stack.Screen
+        name="PersonalContext"
+        component={PersonalContextScreen}
         options={{
           presentation: 'modal',
           animation: 'slide_from_bottom',

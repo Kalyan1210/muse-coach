@@ -14,6 +14,8 @@ export type RootStackParamList = {
   Settings: undefined;
   Paywall: undefined;
   Onboarding: undefined;
+  CreateCoach: { coachId?: string }; // coachId for editing existing
+  PersonalContext: undefined;
 };
 
 // Bottom tabs

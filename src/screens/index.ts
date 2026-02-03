@@ -11,4 +11,6 @@ export * from './ProfileScreen';
 export * from './SettingsScreen';
 export * from './PaywallScreen';
 export * from './OnboardingScreen';
+export * from './CreateCoachScreen';
+export * from './PersonalContextScreen';
 

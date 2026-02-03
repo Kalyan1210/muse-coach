@@ -1,6 +1,6 @@
 /**
  * Coaches Screen
- * Browse and discover AI coaches
+ * Browse and discover AI coaches (including custom ones)
  */
 
 import React from 'react';
@@ -9,19 +9,25 @@ import {
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  TouchableOpacity,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useAppTheme, useCoachColors } from '../theme/ThemeContext';
 import { MainTabScreenProps } from '../navigation/types';
-import { Text, Title1, Body, Subheadline, Card, Avatar, Button } from '../components/ui';
+import { Text, Title1, Subheadline, Card, Avatar, Button } from '../components/ui';
 import { coaches } from '../data/coaches';
 import { Coach } from '../types';
+import { useStore, CustomCoach } from '../store/useStore';
 
 type Props = MainTabScreenProps<'Coaches'>;
 
 const CoachCard: React.FC<{
-  coach: Coach;
+  coach: Coach | CustomCoach;
   onPress: () => void;
-}> = ({ coach, onPress }) => {
+  onLongPress?: () => void;
+  isCustom?: boolean;
+}> = ({ coach, onPress, onLongPress, isCustom }) => {
   const theme = useAppTheme();
   const coachColors = useCoachColors(coach.colorKey);
   
@@ -39,11 +45,23 @@ const CoachCard: React.FC<{
           size="large"
         />
         <View style={styles.coachInfo}>
-          <Text variant="title3">{coach.name}</Text>
+          <View style={styles.nameRow}>
+            <Text variant="title3">{coach.name}</Text>
+            {isCustom && (
+              <View style={[styles.customBadge, { backgroundColor: coachColors.background }]}>
+                <Text variant="caption2" color={coachColors.primary}>Custom</Text>
+              </View>
+            )}
+          </View>
           <Text variant="subheadline" color={coachColors.primary}>
             {coach.title}
           </Text>
         </View>
+        {isCustom && onLongPress && (
+          <TouchableOpacity onPress={onLongPress} style={styles.editButton}>
+            <Ionicons name="pencil" size={18} color={theme.colors.textTertiary} />
+          </TouchableOpacity>
+        )}
       </View>
       
       <Text
@@ -93,13 +111,20 @@ const CoachCard: React.FC<{
 
 export const CoachesScreen: React.FC<Props> = ({ navigation }) => {
   const theme = useAppTheme();
+  const { isPro, customCoaches } = useStore();
   
   const handleCoachPress = (coachId: string) => {
     navigation.navigate('Chat', { coachId });
   };
   
-  const handleCoachDetailPress = (coachId: string) => {
-    navigation.navigate('CoachDetail', { coachId });
+  const handleEditCoach = (coachId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('CreateCoach', { coachId });
+  };
+  
+  const handleCreateCoach = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('CreateCoach', {});
   };
   
   return (
@@ -116,40 +141,87 @@ export const CoachesScreen: React.FC<Props> = ({ navigation }) => {
           </Subheadline>
         </View>
         
-        {/* Coach List */}
-        {coaches.map((coach) => (
-          <CoachCard
-            key={coach.id}
-            coach={coach}
-            onPress={() => handleCoachPress(coach.id)}
-          />
-        ))}
-        
-        {/* Pro Teaser */}
-        <Card
-          variant="flat"
-          padding="large"
-          style={[styles.proTeaser, { backgroundColor: theme.colors.surfaceSecondary }]}
-          onPress={() => navigation.navigate('Paywall')}
-        >
-          <Text variant="headline" align="center">
-            🌟 Unlock More Coaches
-          </Text>
-          <Text
-            variant="callout"
-            color={theme.colors.textSecondary}
-            align="center"
-            style={styles.proDescription}
+        {/* Create Coach Button (Pro users) */}
+        {isPro && (
+          <TouchableOpacity
+            style={[styles.createButton, { backgroundColor: theme.coachColors.creative.background }]}
+            onPress={handleCreateCoach}
+            activeOpacity={0.8}
           >
-            Create custom coaches, share with the community, and get unlimited conversations.
-          </Text>
-          <Button
-            title="See Pro Features"
+            <View style={[styles.createIcon, { backgroundColor: theme.coachColors.creative.primary }]}>
+              <Ionicons name="add" size={24} color="#FFFFFF" />
+            </View>
+            <View style={styles.createText}>
+              <Text variant="headline">Create Your Coach</Text>
+              <Text variant="footnote" color={theme.colors.textSecondary}>
+                Design a custom AI coach for your needs
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.coachColors.creative.primary} />
+          </TouchableOpacity>
+        )}
+        
+        {/* Custom Coaches Section */}
+        {customCoaches.length > 0 && (
+          <View style={styles.section}>
+            <Text variant="caption1" color={theme.colors.textSecondary} style={styles.sectionTitle}>
+              YOUR COACHES
+            </Text>
+            {customCoaches.map((coach) => (
+              <CoachCard
+                key={coach.id}
+                coach={coach}
+                onPress={() => handleCoachPress(coach.id)}
+                onLongPress={() => handleEditCoach(coach.id)}
+                isCustom
+              />
+            ))}
+          </View>
+        )}
+        
+        {/* Built-in Coaches */}
+        <View style={styles.section}>
+          {customCoaches.length > 0 && (
+            <Text variant="caption1" color={theme.colors.textSecondary} style={styles.sectionTitle}>
+              BUILT-IN COACHES
+            </Text>
+          )}
+          {coaches.map((coach) => (
+            <CoachCard
+              key={coach.id}
+              coach={coach}
+              onPress={() => handleCoachPress(coach.id)}
+            />
+          ))}
+        </View>
+        
+        {/* Pro Teaser (for non-Pro users) */}
+        {!isPro && (
+          <Card
+            variant="flat"
+            padding="large"
+            style={[styles.proTeaser, { backgroundColor: theme.colors.surfaceSecondary }]}
             onPress={() => navigation.navigate('Paywall')}
-            variant="primary"
-            size="medium"
-          />
-        </Card>
+          >
+            <Text variant="headline" align="center">
+              ✨ Create Custom Coaches
+            </Text>
+            <Text
+              variant="callout"
+              color={theme.colors.textSecondary}
+              align="center"
+              style={styles.proDescription}
+            >
+              Design coaches that match your exact needs. Set their personality, expertise, and approach.
+            </Text>
+            <Button
+              title="Unlock Pro"
+              onPress={() => navigation.navigate('Paywall')}
+              variant="primary"
+              size="medium"
+            />
+          </Card>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -167,6 +239,32 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 24,
   },
+  createButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  createIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  createText: {
+    flex: 1,
+  },
+  section: {
+    marginBottom: 8,
+  },
+  sectionTitle: {
+    marginBottom: 12,
+    marginLeft: 4,
+    letterSpacing: 0.5,
+  },
   coachCard: {
     marginBottom: 16,
   },
@@ -177,6 +275,23 @@ const styles = StyleSheet.create({
   },
   coachInfo: {
     marginLeft: 16,
+    flex: 1,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  customBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  editButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tagline: {
     marginBottom: 8,
@@ -208,4 +323,3 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
 });
-

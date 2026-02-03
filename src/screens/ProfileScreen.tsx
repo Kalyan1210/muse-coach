@@ -12,30 +12,51 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useAppTheme } from '../theme/ThemeContext';
 import { MainTabScreenProps } from '../navigation/types';
 import { Text, Title1, Card, Button } from '../components/ui';
+import { useStore } from '../store/useStore';
 
 type Props = MainTabScreenProps<'Profile'>;
 
-// Mock user data
-const mockUser = {
-  name: 'Sam',
-  values: ['Growth', 'Authenticity', 'Balance'],
-  isPro: false,
-  conversationCount: 23,
-  wisdomCount: 7,
-};
-
 export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
   const theme = useAppTheme();
+  const { user, isPro, conversations, savedWisdom, customCoaches } = useStore();
+  
+  const userName = user?.name || 'Friend';
+  const userValues = user?.values || [];
+  const conversationCount = conversations.length;
+  const wisdomCount = savedWisdom.length;
+  
+  const handleEditContext = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('PersonalContext');
+  };
+  
+  const handleOpenSettings = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('Settings');
+  };
+  
+  const handleCreateCoach = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    navigation.navigate('CreateCoach', {});
+  };
   
   const menuItems = [
-    { icon: 'person-outline', label: 'Edit Context', sublabel: 'Values, goals & challenges' },
-    { icon: 'notifications-outline', label: 'Reminders', sublabel: 'Daily reflection prompts' },
-    { icon: 'moon-outline', label: 'Appearance', sublabel: 'Light, dark, or system' },
-    { icon: 'shield-outline', label: 'Privacy', sublabel: 'Data & account settings' },
-    { icon: 'help-circle-outline', label: 'Help & Support', sublabel: 'FAQs & contact' },
+    { 
+      icon: 'person-outline', 
+      label: 'Edit Context', 
+      sublabel: 'Values, goals & challenges',
+      onPress: handleEditContext,
+    },
+    { 
+      icon: 'settings-outline', 
+      label: 'Settings', 
+      sublabel: 'Theme, notifications, data',
+      onPress: handleOpenSettings,
+    },
   ];
   
   return (
@@ -53,14 +74,14 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         <Card variant="elevated" padding="large" style={styles.userCard}>
           <View style={styles.userHeader}>
             <View style={[styles.avatar, { backgroundColor: theme.coachColors.productivity.background }]}>
-              <Text style={styles.avatarText}>
-                {mockUser.name.charAt(0).toUpperCase()}
+              <Text style={[styles.avatarText, { color: theme.coachColors.productivity.primary }]}>
+                {userName.charAt(0).toUpperCase()}
               </Text>
             </View>
             <View style={styles.userInfo}>
-              <Text variant="title2">{mockUser.name}</Text>
+              <Text variant="title2">{userName}</Text>
               <Text variant="subheadline" color={theme.colors.textSecondary}>
-                {mockUser.isPro ? '✨ Muse Pro' : 'Free Plan'}
+                {isPro ? '✨ Muse Pro' : 'Free Plan'}
               </Text>
             </View>
           </View>
@@ -69,7 +90,7 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
           <View style={styles.stats}>
             <View style={styles.statItem}>
               <Text variant="numeric" style={styles.statNumber}>
-                {mockUser.conversationCount}
+                {conversationCount}
               </Text>
               <Text variant="caption1" color={theme.colors.textSecondary}>
                 Conversations
@@ -78,44 +99,84 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
             <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
             <View style={styles.statItem}>
               <Text variant="numeric" style={styles.statNumber}>
-                {mockUser.wisdomCount}
+                {wisdomCount}
               </Text>
               <Text variant="caption1" color={theme.colors.textSecondary}>
                 Saved Wisdom
               </Text>
             </View>
+            {isPro && (
+              <>
+                <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
+                <View style={styles.statItem}>
+                  <Text variant="numeric" style={styles.statNumber}>
+                    {customCoaches.length}
+                  </Text>
+                  <Text variant="caption1" color={theme.colors.textSecondary}>
+                    Custom Coaches
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
         </Card>
         
         {/* Your Values */}
         <View style={styles.section}>
-          <Text variant="headline" style={styles.sectionTitle}>
-            Your Values
-          </Text>
-          <View style={styles.values}>
-            {mockUser.values.map((value, index) => (
-              <View
-                key={index}
-                style={[styles.valueTag, { backgroundColor: theme.colors.surfaceSecondary }]}
-              >
-                <Text variant="callout" color={theme.colors.textPrimary}>
-                  {value}
-                </Text>
-              </View>
-            ))}
-            <TouchableOpacity
-              style={[styles.valueTag, styles.addTag, { borderColor: theme.colors.border }]}
-            >
-              <Ionicons name="add" size={18} color={theme.colors.textSecondary} />
-              <Text variant="callout" color={theme.colors.textSecondary}>
-                Add
-              </Text>
+          <View style={styles.sectionHeader}>
+            <Text variant="headline">Your Values</Text>
+            <TouchableOpacity onPress={handleEditContext}>
+              <Text variant="callout" color={theme.coachColors.productivity.primary}>Edit</Text>
             </TouchableOpacity>
+          </View>
+          <View style={styles.values}>
+            {userValues.length > 0 ? (
+              userValues.map((value, index) => (
+                <View
+                  key={index}
+                  style={[styles.valueTag, { backgroundColor: theme.colors.surfaceSecondary }]}
+                >
+                  <Text variant="callout" color={theme.colors.textPrimary}>
+                    {value}
+                  </Text>
+                </View>
+              ))
+            ) : (
+              <TouchableOpacity
+                style={[styles.emptyValues, { backgroundColor: theme.colors.surfaceSecondary }]}
+                onPress={handleEditContext}
+              >
+                <Text variant="callout" color={theme.colors.textSecondary}>
+                  Add your values to personalize coaching
+                </Text>
+                <Ionicons name="arrow-forward" size={16} color={theme.colors.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
         
+        {/* Create Coach (Pro) */}
+        {isPro && (
+          <TouchableOpacity
+            style={[styles.createCoachCard, { backgroundColor: theme.coachColors.creative.background }]}
+            onPress={handleCreateCoach}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.createIcon, { backgroundColor: theme.coachColors.creative.primary }]}>
+              <Ionicons name="add" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.createText}>
+              <Text variant="headline">Create Custom Coach</Text>
+              <Text variant="footnote" color={theme.colors.textSecondary}>
+                Design an AI coach tailored to you
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.coachColors.creative.primary} />
+          </TouchableOpacity>
+        )}
+        
         {/* Upgrade Card */}
-        {!mockUser.isPro && (
+        {!isPro && (
           <Card
             variant="flat"
             padding="large"
@@ -138,9 +199,6 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
         
         {/* Menu Items */}
         <View style={styles.section}>
-          <Text variant="headline" style={styles.sectionTitle}>
-            Settings
-          </Text>
           <Card variant="elevated" padding="none">
             {menuItems.map((item, index) => (
               <TouchableOpacity
@@ -152,6 +210,8 @@ export const ProfileScreen: React.FC<Props> = ({ navigation }) => {
                     borderBottomColor: theme.colors.border,
                   },
                 ]}
+                onPress={item.onPress}
+                activeOpacity={0.7}
               >
                 <View style={[styles.menuIcon, { backgroundColor: theme.colors.surfaceSecondary }]}>
                   <Ionicons
@@ -242,7 +302,10 @@ const styles = StyleSheet.create({
   section: {
     marginBottom: 24,
   },
-  sectionTitle: {
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
   },
   values: {
@@ -258,10 +321,32 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 8,
   },
-  addTag: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    backgroundColor: 'transparent',
+  emptyValues: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    width: '100%',
+  },
+  createCoachCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 24,
+  },
+  createIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  createText: {
+    flex: 1,
   },
   upgradeCard: {
     marginBottom: 24,
@@ -290,4 +375,3 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
 });
-

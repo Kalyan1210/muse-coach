@@ -3,7 +3,7 @@
  * OpenAI integration for chat completions
  */
 
-import { Message } from '../types';
+import { Message, UserContext } from '../types';
 import Constants from 'expo-constants';
 
 const OPENAI_API_KEY = Constants.expoConfig?.extra?.openaiApiKey || '';
@@ -26,17 +26,53 @@ interface OpenAIResponse {
 }
 
 /**
+ * Build enhanced system prompt with user context
+ */
+const buildEnhancedSystemPrompt = (
+  basePrompt: string, 
+  userContext?: UserContext | null
+): string => {
+  if (!userContext) return basePrompt;
+  
+  let contextAddition = '\n\n--- About the person you\'re coaching ---\n';
+  
+  if (userContext.name) {
+    contextAddition += `Their name is ${userContext.name}.\n`;
+  }
+  
+  if (userContext.values && userContext.values.length > 0) {
+    contextAddition += `They value: ${userContext.values.join(', ')}.\n`;
+  }
+  
+  if (userContext.goals && userContext.goals.length > 0) {
+    contextAddition += `They're working on: ${userContext.goals.join(', ')}.\n`;
+  }
+  
+  if (userContext.challenges && userContext.challenges.length > 0) {
+    contextAddition += `Current challenges: ${userContext.challenges.join(', ')}.\n`;
+  }
+  
+  contextAddition += '\nUse this context to make your coaching more relevant and personal. Reference their values or goals when appropriate, but don\'t force it.';
+  
+  return basePrompt + contextAddition;
+};
+
+/**
  * Send a message to the AI and get a response
  */
 export const sendMessageToAI = async (
   systemPrompt: string,
   conversationHistory: Message[],
-  userMessage: string
+  userMessage: string,
+  userContext?: UserContext | null
 ): Promise<{ success: boolean; content?: string; error?: string }> => {
   try {
+    // Build enhanced system prompt with user context
+    const enhancedPrompt = buildEnhancedSystemPrompt(systemPrompt, userContext);
+    
     // Build messages array for OpenAI
     const messages: ChatMessage[] = [
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: enhancedPrompt },
     ];
     
     // Add conversation history (last 10 messages for context)

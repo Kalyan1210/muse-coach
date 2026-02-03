@@ -6,12 +6,39 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Message, Conversation, UserContext, SavedWisdom } from '../types';
+import { Message, Conversation, UserContext, SavedWisdom, Coach, CoachCategory } from '../types';
+import { CoachColorKey } from '../theme';
+
+// Custom coach type (user-created)
+export interface CustomCoach {
+  id: string;
+  name: string;
+  emoji: string;
+  title: string;
+  category: CoachCategory;
+  colorKey: CoachColorKey;
+  tagline: string;
+  description: string;
+  expertise: string[];
+  personality: {
+    tone: string;
+    style: string;
+    approach: string;
+  };
+  systemPrompt: string;
+  sampleQuestions: string[];
+  isPremium: false; // Custom coaches are always accessible to their creator
+  isCustom: true;
+  createdAt: Date;
+}
 
 interface AppState {
   // User
   user: UserContext | null;
   isPro: boolean;
+  
+  // Custom coaches (Pro feature)
+  customCoaches: CustomCoach[];
   
   // Conversations
   conversations: Conversation[];
@@ -30,7 +57,14 @@ interface AppState {
   
   // Actions
   setUser: (user: UserContext) => void;
+  updateUser: (updates: Partial<UserContext>) => void;
   setIsPro: (isPro: boolean) => void;
+  
+  // Custom coach actions
+  addCustomCoach: (coach: Omit<CustomCoach, 'id' | 'createdAt' | 'isCustom' | 'isPremium'>) => string;
+  updateCustomCoach: (id: string, updates: Partial<CustomCoach>) => void;
+  deleteCustomCoach: (id: string) => void;
+  getCustomCoach: (id: string) => CustomCoach | undefined;
   
   addMessage: (conversationId: string, message: Message) => void;
   startConversation: (coachId: string) => string;
@@ -55,6 +89,7 @@ export const useStore = create<AppState>()(
   // Initial state
   user: null,
   isPro: false,
+  customCoaches: [],
   conversations: [],
   activeConversationId: null,
   savedWisdom: [],
@@ -67,7 +102,46 @@ export const useStore = create<AppState>()(
   
   // User actions
   setUser: (user) => set({ user }),
+  updateUser: (updates) => set((state) => ({
+    user: state.user ? { ...state.user, ...updates } : null,
+  })),
   setIsPro: (isPro) => set({ isPro }),
+  
+  // Custom coach actions
+  addCustomCoach: (coachData) => {
+    const id = `custom-${generateId()}`;
+    const newCoach: CustomCoach = {
+      ...coachData,
+      id,
+      isPremium: false,
+      isCustom: true,
+      createdAt: new Date(),
+    };
+    
+    set((state) => ({
+      customCoaches: [newCoach, ...state.customCoaches],
+    }));
+    
+    return id;
+  },
+  
+  updateCustomCoach: (id, updates) => {
+    set((state) => ({
+      customCoaches: state.customCoaches.map((coach) =>
+        coach.id === id ? { ...coach, ...updates } : coach
+      ),
+    }));
+  },
+  
+  deleteCustomCoach: (id) => {
+    set((state) => ({
+      customCoaches: state.customCoaches.filter((coach) => coach.id !== id),
+    }));
+  },
+  
+  getCustomCoach: (id) => {
+    return get().customCoaches.find((coach) => coach.id === id);
+  },
   
   // Conversation actions
   addMessage: (conversationId, message) => {
@@ -165,6 +239,7 @@ export const useStore = create<AppState>()(
         // Only persist these fields
         user: state.user,
         isPro: state.isPro,
+        customCoaches: state.customCoaches,
         conversations: state.conversations,
         savedWisdom: state.savedWisdom,
         dailyMessageCount: state.dailyMessageCount,

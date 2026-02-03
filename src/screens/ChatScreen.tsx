@@ -21,9 +21,9 @@ import { useAppTheme, useCoachColors } from '../theme/ThemeContext';
 import { RootStackScreenProps } from '../navigation/types';
 import { Text, Avatar } from '../components/ui';
 import { getCoachById } from '../data/coaches';
-import { Message } from '../types';
+import { Message, Coach } from '../types';
 import { sendMessageToAI, isAIConfigured } from '../services/ai';
-import { useStore } from '../store/useStore';
+import { useStore, CustomCoach } from '../store/useStore';
 
 type Props = RootStackScreenProps<'Chat'>;
 
@@ -135,16 +135,7 @@ const TypingIndicator: React.FC = () => {
 
 export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
   const { coachId } = route.params;
-  const coach = getCoachById(coachId);
   const theme = useAppTheme();
-  const coachColors = coach ? useCoachColors(coach.colorKey) : null;
-  
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingMessage, setTypingMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
   
   const { 
     canSendMessage, 
@@ -155,7 +146,23 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
     addMessage,
     activeConversationId,
     setActiveConversation,
+    customCoaches,
+    user,
   } = useStore();
+  
+  // Look up coach from built-in or custom coaches
+  const builtInCoach = getCoachById(coachId);
+  const customCoach = customCoaches.find(c => c.id === coachId);
+  const coach: Coach | CustomCoach | undefined = builtInCoach || customCoach;
+  
+  const coachColors = coach ? useCoachColors(coach.colorKey) : null;
+  
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputText, setInputText] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
+  const [typingMessage, setTypingMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
   
   const [conversationId, setConversationId] = useState<string | null>(null);
   
@@ -264,7 +271,8 @@ export const ChatScreen: React.FC<Props> = ({ navigation, route }) => {
     const result = await sendMessageToAI(
       coach.systemPrompt,
       messages,
-      userMessage.content
+      userMessage.content,
+      user
     );
     
     setIsTyping(false);
